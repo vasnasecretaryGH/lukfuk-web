@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, Search } from "lucide-react";
-import { getProducts, createProduct, updateProduct, deleteProduct, Product } from "@/lib/firebase/firestore";
+import { getProducts, createProduct, updateProduct, deleteProduct, Product } from "@/lib/supabase/db";
 
 const stockStatusStyle = (stock: number) => {
   if (stock === 0) return "bg-blush text-charcoal";
@@ -17,12 +17,12 @@ const stockLabel = (stock: number) => {
 };
 
 function ProductModal({ product, onClose, onSave }: { product: Partial<Product> | null; onClose: () => void; onSave: () => void }) {
-  const isNew = !product?.nameEn;
+  const isNew = !product?.name_en;
   const [form, setForm] = useState<Partial<Product>>(product ?? {
-    nameEn: "", nameTh: "", descEn: "", descTh: "",
+    name_en: "", name_th: "", desc_en: "", desc_th: "",
     price: 0, category: "house", stock: 0,
     dimensions: "", material: "", badge: null,
-    images: [], isNewCollection: false, isActive: true,
+    images: [], is_new_collection: false, is_active: true,
   });
   const [saving, setSaving] = useState(false);
 
@@ -48,12 +48,12 @@ function ProductModal({ product, onClose, onSave }: { product: Partial<Product> 
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">Product Name (EN)</label>
-              <input value={form.nameEn ?? ""} onChange={(e) => set("nameEn", e.target.value)}
+              <input value={form.name_en ?? ""} onChange={(e) => set("name_en", e.target.value)}
                 className="w-full mt-1 bg-mint/20 rounded-2xl px-4 py-3 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-sage/40" />
             </div>
             <div className="col-span-2">
               <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">Product Name (TH)</label>
-              <input value={form.nameTh ?? ""} onChange={(e) => set("nameTh", e.target.value)}
+              <input value={form.name_th ?? ""} onChange={(e) => set("name_th", e.target.value)}
                 className="w-full mt-1 bg-mint/20 rounded-2xl px-4 py-3 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-sage/40" />
             </div>
             <div>
@@ -86,7 +86,7 @@ function ProductModal({ product, onClose, onSave }: { product: Partial<Product> 
             </div>
             <div className="col-span-2">
               <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">Description (EN)</label>
-              <textarea rows={3} value={form.descEn ?? ""} onChange={(e) => set("descEn", e.target.value)}
+              <textarea rows={3} value={form.desc_en ?? ""} onChange={(e) => set("desc_en", e.target.value)}
                 className="w-full mt-1 bg-mint/20 rounded-2xl px-4 py-3 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-sage/40 resize-none" />
             </div>
             <div>
@@ -102,11 +102,11 @@ function ProductModal({ product, onClose, onSave }: { product: Partial<Product> 
             </div>
             <div className="col-span-2 flex gap-4">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={form.isNewCollection ?? false} onChange={(e) => set("isNewCollection", e.target.checked)} className="accent-sage" />
+                <input type="checkbox" checked={form.is_new_collection ?? false} onChange={(e) => set("is_new_collection", e.target.checked)} className="accent-sage" />
                 <span className="text-sm text-charcoal/70">New Collection</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={form.isActive ?? true} onChange={(e) => set("isActive", e.target.checked)} className="accent-sage" />
+                <input type="checkbox" checked={form.is_active ?? true} onChange={(e) => set("is_active", e.target.checked)} className="accent-sage" />
                 <span className="text-sm text-charcoal/70">Active (visible in shop)</span>
               </label>
             </div>
@@ -140,7 +140,7 @@ export default function AdminProductsPage() {
   };
 
   const filtered = products.filter((p) =>
-    p.nameEn.toLowerCase().includes(search.toLowerCase())
+    p.name_en.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -187,7 +187,7 @@ export default function AdminProductsPage() {
                         {p.images[0] ? <img src={p.images[0]} alt="" className="w-full h-full object-cover rounded-xl" /> : "🐾"}
                       </div>
                       <div>
-                        <p className="font-medium text-charcoal">{p.nameEn}</p>
+                        <p className="font-medium text-charcoal">{p.name_en}</p>
                         {p.badge && <span className="text-[10px] bg-gold/20 text-charcoal px-2 py-0.5 rounded-full font-medium">{p.badge}</span>}
                       </div>
                     </div>

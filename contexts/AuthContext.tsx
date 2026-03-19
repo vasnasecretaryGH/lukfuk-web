@@ -1,53 +1,56 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User } from "firebase/auth";
-import { onAuthChange } from "@/lib/firebase/auth";
-import { getUserDoc, UserDoc } from "@/lib/firebase/firestore";
+import type { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase/client";
+import { getProfile, Profile } from "@/lib/supabase/db";
 
 interface AuthContextValue {
   user: User | null;
-  userDoc: UserDoc | null;
+  profile: Profile | null;
   loading: boolean;
-  refreshUserDoc: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
-  userDoc: null,
+  profile: null,
   loading: true,
-  refreshUserDoc: async () => {},
+  refreshProfile: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [userDoc, setUserDoc] = useState<UserDoc | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserDoc = async (uid: string) => {
-    const doc = await getUserDoc(uid);
-    setUserDoc(doc);
+  const fetchProfile = async (uid: string) => {
+    const p = await getProfile(uid);
+    setProfile(p);
   };
 
-  const refreshUserDoc = async () => {
-    if (user) await fetchUserDoc(user.uid);
+  const refreshProfile = async () => {
+    if (user) await fetchProfile(user.id);
   };
 
   useEffect(() => {
-    const unsub = onAuthChange(async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        await fetchUserDoc(firebaseUser.uid);
-      } else {
-        setUserDoc(null);
-      }
-      setLoading(false);
+    supabase().auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) fetchProfile(session.user.id).finally(() => setLoading(false));
+      else setLoading(false);
     });
-    return unsub;
+
+    const { data: { subscription } } = supabase().auth.onAuthStateChange((_event: string, session: Session | null) => {
+      setUser(session?.user ?? null);
+      if (session?.user) fetchProfile(session.user.id);
+      else setProfile(null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, userDoc, loading, refreshUserDoc }}>
+    <AuthContext.Provider value={{ user, profile, loading, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

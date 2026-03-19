@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Phone, Mail } from "lucide-react";
-import { setupRecaptcha, sendOtp, verifyOtp, loginWithEmail } from "@/lib/firebase/auth";
-import { createUserDoc, getUserDoc } from "@/lib/firebase/firestore";
-import type { ConfirmationResult, RecaptchaVerifier } from "firebase/auth";
+import { signInWithOtp, verifyOtp, signInWithEmail } from "@/lib/supabase/auth";
 
 type Method = "phone" | "email";
 type Step = "input" | "otp";
@@ -22,9 +20,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const confirmationRef = useRef<ConfirmationResult | null>(null);
-  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
-
   const handleOtpChange = (i: number, val: string) => {
     if (!/^\d?$/.test(val)) return;
     const next = [...otp];
@@ -39,35 +34,22 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      if (!recaptchaRef.current) {
-        recaptchaRef.current = setupRecaptcha("recaptcha-container");
-      }
       const e164 = "+66" + phone.replace(/^0/, "").replace(/-/g, "");
-      confirmationRef.current = await sendOtp(e164, recaptchaRef.current);
+      await signInWithOtp(e164);
       setStep("otp");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Failed to send OTP. Please try again.");
+      setError(e instanceof Error ? e.message : "Failed to send OTP.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleVerifyOtp = async () => {
-    if (!confirmationRef.current) return;
     setError("");
     setLoading(true);
     try {
-      const user = await verifyOtp(confirmationRef.current, otp.join(""));
-      // Create user doc if first login
-      const existing = await getUserDoc(user.uid);
-      if (!existing) {
-        await createUserDoc(user.uid, {
-          displayName: user.displayName ?? "Cat Parent",
-          email: user.email ?? "",
-          phone: user.phoneNumber ?? phone,
-          lang: "TH",
-        });
-      }
+      const e164 = "+66" + phone.replace(/^0/, "").replace(/-/g, "");
+      await verifyOtp(e164, otp.join(""));
       router.push("/");
     } catch {
       setError("Invalid OTP. Please try again.");
@@ -80,7 +62,7 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await loginWithEmail(email, password);
+      await signInWithEmail(email, password);
       router.push("/");
     } catch {
       setError("Invalid email or password.");
@@ -91,9 +73,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-cream flex">
-      {/* Recaptcha container (invisible) */}
-      <div id="recaptcha-container" />
-
       {/* Left decorative panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-mint to-sage/50 flex-col items-center justify-center p-16 text-center">
         <p className="font-display text-5xl font-bold text-charcoal mb-4 leading-tight">

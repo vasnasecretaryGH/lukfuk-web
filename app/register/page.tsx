@@ -1,12 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Phone, Mail } from "lucide-react";
-import { setupRecaptcha, sendOtp, verifyOtp, registerWithEmail } from "@/lib/firebase/auth";
-import { createUserDoc } from "@/lib/firebase/firestore";
-import type { ConfirmationResult, RecaptchaVerifier } from "firebase/auth";
+import { signInWithOtp, verifyOtp, signUpWithEmail } from "@/lib/supabase/auth";
 
 type Method = "phone" | "email";
 type Step = "input" | "otp" | "profile";
@@ -24,10 +22,6 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const confirmationRef = useRef<ConfirmationResult | null>(null);
-  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
-  const pendingUserRef = useRef<{ uid: string; phoneNumber: string } | null>(null);
-
   const handleOtpChange = (i: number, val: string) => {
     if (!/^\d?$/.test(val)) return;
     const next = [...otp];
@@ -40,11 +34,8 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      if (!recaptchaRef.current) {
-        recaptchaRef.current = setupRecaptcha("recaptcha-container");
-      }
       const e164 = "+66" + phone.replace(/^0/, "").replace(/-/g, "");
-      confirmationRef.current = await sendOtp(e164, recaptchaRef.current);
+      await signInWithOtp(e164);
       setStep("otp");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to send OTP.");
@@ -54,12 +45,11 @@ export default function RegisterPage() {
   };
 
   const handleVerifyOtp = async () => {
-    if (!confirmationRef.current) return;
     setError("");
     setLoading(true);
     try {
-      const user = await verifyOtp(confirmationRef.current, otp.join(""));
-      pendingUserRef.current = { uid: user.uid, phoneNumber: phone };
+      const e164 = "+66" + phone.replace(/^0/, "").replace(/-/g, "");
+      await verifyOtp(e164, otp.join(""));
       setStep("profile");
     } catch {
       setError("Invalid OTP. Please try again.");
@@ -73,16 +63,11 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      if (method === "phone" && pendingUserRef.current) {
-        await createUserDoc(pendingUserRef.current.uid, {
-          displayName: name,
-          email: "",
-          phone: pendingUserRef.current.phoneNumber,
-          lang,
-        });
-      } else {
-        await registerWithEmail(email, password, name, lang);
+      if (method === "email") {
+        await signUpWithEmail(email, password, name, lang);
       }
+      // Phone users: profile auto-created by DB trigger on OTP verify
+      // Update display_name via supabase auth metadata on next login
       router.push("/");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Registration failed.");
@@ -96,8 +81,6 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-cream flex">
-      <div id="recaptcha-container" />
-
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blush/60 to-mint flex-col items-center justify-center p-16 text-center">
         <p className="font-display text-5xl font-bold text-charcoal mb-4 leading-tight">

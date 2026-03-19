@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ShoppingCart, User, Globe, LogOut } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { logout } from "@/lib/firebase/auth";
+import { signOut } from "@/lib/supabase/auth";
 import { useCartStore } from "@/lib/stores/cartStore";
 
 const navLinks = [
@@ -17,12 +17,12 @@ const navLinks = [
 
 export default function Navbar() {
   const [lang, setLang] = useState<"TH" | "EN">("EN");
-  const { user, userDoc } = useAuth();
+  const { user, profile } = useAuth();
   const itemCount = useCartStore((s) => s.itemCount());
   const router = useRouter();
 
   const handleLogout = async () => {
-    await logout();
+    await signOut();
     router.push("/");
   };
 
@@ -84,9 +84,9 @@ export default function Navbar() {
                 className="flex items-center gap-1.5 text-xs font-medium text-charcoal/70 hover:text-charcoal transition-colors"
               >
                 <div className="w-6 h-6 rounded-full bg-mint flex items-center justify-center text-[10px] font-bold text-charcoal/70">
-                  {(userDoc?.displayName ?? user.email ?? "U")[0].toUpperCase()}
+                  {(profile?.display_name ?? user.email ?? "U")[0].toUpperCase()}
                 </div>
-                <span className="hidden md:inline">{userDoc?.displayName ?? "Account"}</span>
+                <span className="hidden md:inline">{profile?.display_name ?? "Account"}</span>
               </Link>
               <button
                 onClick={handleLogout}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { SlidersHorizontal, ChevronDown } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-import { getProducts, Product } from "@/lib/firebase/firestore";
+import { getProducts, Product } from "@/lib/supabase/db";
 
 const categories = ["house", "scratcher", "combo"];
 
@@ -117,12 +117,12 @@ export default function ShopPage() {
                       <span className="absolute top-3 right-3 bg-blush text-charcoal/60 text-[10px] font-semibold px-2.5 py-1 rounded-full">Out of Stock</span>
                     )}
                     {p.images[0] ? (
-                      <img src={p.images[0]} alt={p.nameEn} className="w-full h-full object-cover" />
+                      <img src={p.images[0]} alt={p.name_en} className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-5xl">🐾</span>
                     )}
                   </div>
-                  <p className="font-body font-medium text-charcoal text-sm leading-snug">{p.nameEn}</p>
+                  <p className="font-body font-medium text-charcoal text-sm leading-snug">{p.name_en}</p>
                   <p className="text-sage font-semibold text-sm mt-0.5">฿{p.price.toLocaleString()}</p>
                 </Link>
               ))}

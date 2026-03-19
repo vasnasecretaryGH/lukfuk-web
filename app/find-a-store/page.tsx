@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MapPin, Phone, Clock, Search } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import { getPetShops, PetShop } from "@/lib/supabase/db";
 
-const stores = [
+const stores_fallback = [
   {
-    id: 1,
+    id: "1",
     name: "Art Flagship House",
     address: "123 Sukhumvit Soi 10, Khlong Toei",
     district: "Bangkok 10110",
@@ -63,13 +64,18 @@ const stores = [
 ];
 
 export default function FindAStorePage() {
+  const [stores, setStores] = useState<PetShop[]>([]);
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    getPetShops().then((data) => setStores(data.length ? data : stores_fallback as unknown as PetShop[]));
+  }, []);
 
   const filtered = stores.filter(
     (s) =>
       s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.district.toLowerCase().includes(search.toLowerCase()) ||
-      s.province.toLowerCase().includes(search.toLowerCase())
+      (s.district ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.province ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
   return (

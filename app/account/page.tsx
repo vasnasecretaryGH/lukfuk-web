@@ -6,8 +6,8 @@ import { ShoppingBag, Star, MapPin, Settings, LogOut, Copy, Check } from "lucide
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
-import { logout } from "@/lib/firebase/auth";
-import { getUserPointsHistory, getUserOrders, updateUserProfile, PointsEntry, Order } from "@/lib/firebase/firestore";
+import { signOut } from "@/lib/supabase/auth";
+import { getUserPointsHistory, getUserOrders, updateProfile, PointsEntry, Order } from "@/lib/supabase/db";
 
 const statusColor: Record<string, string> = {
   delivered: "bg-mint text-sage-dark",
@@ -24,7 +24,7 @@ const navItems = [
 ];
 
 export default function AccountPage() {
-  const { user, userDoc, loading, refreshUserDoc } = useAuth();
+  const { user, profile, loading, refreshProfile } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("points");
   const [copied, setCopied] = useState(false);
@@ -39,17 +39,17 @@ export default function AccountPage() {
 
   useEffect(() => {
     if (!user) return;
-    getUserPointsHistory(user.uid).then(setPointsHistory);
-    getUserOrders(user.uid).then(setOrders);
+    getUserPointsHistory(user.id).then(setPointsHistory);
+    getUserOrders(user.id).then(setOrders);
   }, [user]);
 
   useEffect(() => {
-    if (userDoc) setDisplayName(userDoc.displayName);
-  }, [userDoc]);
+    if (profile) setDisplayName(profile.display_name);
+  }, [profile]);
 
   const handleCopy = () => {
-    if (!userDoc?.referralCode) return;
-    navigator.clipboard.writeText(userDoc.referralCode);
+    if (!profile?.referral_code) return;
+    navigator.clipboard.writeText(profile.referral_code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -57,17 +57,17 @@ export default function AccountPage() {
   const handleSaveSettings = async () => {
     if (!user) return;
     setSaving(true);
-    await updateUserProfile(user.uid, { displayName });
-    await refreshUserDoc();
+    await updateProfile(user.id, { display_name: displayName });
+    await refreshProfile();
     setSaving(false);
   };
 
   const handleLogout = async () => {
-    await logout();
+    await signOut();
     router.push("/");
   };
 
-  if (loading || !user || !userDoc) {
+  if (loading || !user || !profile) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-sage border-t-transparent animate-spin" />
@@ -75,7 +75,7 @@ export default function AccountPage() {
     );
   }
 
-  const initials = userDoc.displayName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+  const initials = profile.display_name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
 
   return (
     <>
@@ -89,8 +89,8 @@ export default function AccountPage() {
               <div className="w-16 h-16 rounded-full bg-mint flex items-center justify-center text-sage font-bold text-xl mx-auto mb-3">
                 {initials}
               </div>
-              <p className="font-semibold text-charcoal text-sm">{userDoc.displayName}</p>
-              <p className="text-xs text-charcoal/40 mt-0.5">{userDoc.email || user.phoneNumber}</p>
+              <p className="font-semibold text-charcoal text-sm">{profile.display_name}</p>
+              <p className="text-xs text-charcoal/40 mt-0.5">{profile.email || profile.phone}</p>
             </div>
             <nav className="space-y-1">
               {navItems.map(({ key, label, icon: Icon }) => (
@@ -114,7 +114,7 @@ export default function AccountPage() {
                 <div className="bg-charcoal rounded-3xl p-8">
                   <p className="text-cream/50 text-xs uppercase tracking-widest mb-2">Available Balance</p>
                   <p className="font-display text-6xl font-bold text-cream">
-                    {userDoc.points.toLocaleString()} <span className="text-2xl font-normal text-cream/40">pts</span>
+                    {profile.points.toLocaleString()} <span className="text-2xl font-normal text-cream/40">pts</span>
                   </p>
                   <p className="text-cream/40 text-xs mt-3 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-sage inline-block" /> Resets 31 December
@@ -126,7 +126,7 @@ export default function AccountPage() {
                   <p className="text-sm text-charcoal/50 mb-5">Share your code. When they complete their first order, you earn 5 bonus points.</p>
                   <div className="flex gap-2 flex-wrap">
                     <div className="flex items-center gap-2 bg-mint/40 rounded-full px-4 py-2.5 flex-1 min-w-0">
-                      <span className="text-sm font-mono font-medium text-charcoal truncate">{userDoc.referralCode}</span>
+                      <span className="text-sm font-mono font-medium text-charcoal truncate">{profile.referral_code}</span>
                       <button onClick={handleCopy} className="text-charcoal/40 hover:text-charcoal transition-colors shrink-0">
                         {copied ? <Check size={14} className="text-sage" /> : <Copy size={14} />}
                       </button>
@@ -154,7 +154,7 @@ export default function AccountPage() {
                         {pointsHistory.map((row, i) => (
                           <tr key={i} className="hover:bg-mint/10 transition-colors">
                             <td className="py-3 text-charcoal/50 text-xs whitespace-nowrap pr-4">
-                              {row.createdAt ? new Date(row.createdAt.seconds * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                              {row.created_at ? new Date(row.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
                             </td>
                             <td className="py-3 text-charcoal/70">{row.description}</td>
                             <td className={`py-3 text-right font-semibold ${row.amount > 0 ? "text-sage" : "text-blush"}`}>
@@ -181,15 +181,15 @@ export default function AccountPage() {
                       <div key={o.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-sage/10 hover:bg-mint/10 transition-colors">
                         <div>
                           <p className="font-medium text-sm text-charcoal">#{o.id?.slice(0, 8).toUpperCase()}</p>
-                          <p className="text-xs text-charcoal/40 mt-0.5">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</p>
+                          <p className="text-xs text-charcoal/40 mt-0.5">{(o.order_items ?? []).map((i) => `${i.name} ×${i.qty}`).join(", ")}</p>
                         </div>
                         <div className="flex items-center gap-3">
                           <p className="font-semibold text-charcoal text-sm">฿{o.total.toLocaleString()}</p>
                           <span className={`text-xs font-medium px-3 py-1 rounded-full ${statusColor[o.status]}`}>
                             {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
                           </span>
-                          {o.trackingNumber && (
-                            <span className="text-xs text-charcoal/40 font-mono">{o.trackingNumber}</span>
+                          {o.tracking_number && (
+                            <span className="text-xs text-charcoal/40 font-mono">{o.tracking_number}</span>
                           )}
                         </div>
                       </div>
@@ -221,12 +221,12 @@ export default function AccountPage() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">Email</label>
-                  <input value={userDoc.email} readOnly
+                  <input value={profile.email ?? ""} readOnly
                     className="w-full mt-1 bg-mint/10 rounded-2xl px-4 py-3 text-sm text-charcoal/50 cursor-not-allowed" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">Phone</label>
-                  <input value={userDoc.phone || user.phoneNumber || ""} readOnly
+                  <input value={profile.phone ?? ""} readOnly
                     className="w-full mt-1 bg-mint/10 rounded-2xl px-4 py-3 text-sm text-charcoal/50 cursor-not-allowed" />
                 </div>
                 <button onClick={handleSaveSettings} disabled={saving}
