@@ -67,10 +67,21 @@ export default function AccountPage() {
     router.push("/");
   };
 
-  if (loading || !user || !profile) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-cream flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-2 border-sage border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user || !profile) {
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center flex-col gap-3">
+        <p className="text-charcoal/50 text-sm">Could not load your profile.</p>
+        <a href="/login" className="bg-charcoal text-cream px-6 py-2.5 rounded-full text-sm font-medium hover:bg-charcoal/80 transition-colors">
+          Back to Login
+        </a>
       </div>
     );
   }
