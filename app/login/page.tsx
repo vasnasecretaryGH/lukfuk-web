@@ -1,19 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, Phone, Mail } from "lucide-react";
+import { setupRecaptcha, sendOtp, verifyOtp, loginWithEmail } from "@/lib/firebase/auth";
+import { createUserDoc, getUserDoc } from "@/lib/firebase/firestore";
+import type { ConfirmationResult, RecaptchaVerifier } from "firebase/auth";
 
 type Method = "phone" | "email";
 type Step = "input" | "otp";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [method, setMethod] = useState<Method>("phone");
   const [step, setStep] = useState<Step>("input");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const confirmationRef = useRef<ConfirmationResult | null>(null);
+  const recaptchaRef = useRef<RecaptchaVerifier | null>(null);
 
   const handleOtpChange = (i: number, val: string) => {
     if (!/^\d?$/.test(val)) return;
@@ -21,13 +31,69 @@ export default function LoginPage() {
     next[i] = val;
     setOtp(next);
     if (val && i < 5) {
-      const el = document.getElementById(`otp-${i + 1}`);
-      el?.focus();
+      document.getElementById(`otp-${i + 1}`)?.focus();
+    }
+  };
+
+  const handleSendOtp = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      if (!recaptchaRef.current) {
+        recaptchaRef.current = setupRecaptcha("recaptcha-container");
+      }
+      const e164 = "+66" + phone.replace(/^0/, "").replace(/-/g, "");
+      confirmationRef.current = await sendOtp(e164, recaptchaRef.current);
+      setStep("otp");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to send OTP. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!confirmationRef.current) return;
+    setError("");
+    setLoading(true);
+    try {
+      const user = await verifyOtp(confirmationRef.current, otp.join(""));
+      // Create user doc if first login
+      const existing = await getUserDoc(user.uid);
+      if (!existing) {
+        await createUserDoc(user.uid, {
+          displayName: user.displayName ?? "Cat Parent",
+          email: user.email ?? "",
+          phone: user.phoneNumber ?? phone,
+          lang: "TH",
+        });
+      }
+      router.push("/");
+    } catch {
+      setError("Invalid OTP. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEmailLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await loginWithEmail(email, password);
+      router.push("/");
+    } catch {
+      setError("Invalid email or password.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-cream flex">
+      {/* Recaptcha container (invisible) */}
+      <div id="recaptcha-container" />
+
       {/* Left decorative panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-mint to-sage/50 flex-col items-center justify-center p-16 text-center">
         <p className="font-display text-5xl font-bold text-charcoal mb-4 leading-tight">
@@ -53,12 +119,18 @@ export default function LoginPage() {
             </Link>
           </p>
 
+          {error && (
+            <div className="bg-blush/40 text-charcoal text-sm rounded-2xl px-4 py-3 mb-5">
+              {error}
+            </div>
+          )}
+
           {/* Method toggle */}
           <div className="flex bg-mint/30 rounded-full p-1 mb-8">
             {(["phone", "email"] as Method[]).map((m) => (
               <button
                 key={m}
-                onClick={() => { setMethod(m); setStep("input"); }}
+                onClick={() => { setMethod(m); setStep("input"); setError(""); }}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full text-sm font-medium transition-all duration-200 ${method === m ? "bg-charcoal text-cream shadow-sm" : "text-charcoal/50 hover:text-charcoal"}`}
               >
                 {m === "phone" ? <Phone size={14} /> : <Mail size={14} />}
@@ -86,10 +158,11 @@ export default function LoginPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => setStep("otp")}
-                    className="w-full bg-charcoal text-cream py-4 rounded-full font-medium hover:bg-charcoal/80 transition-colors flex items-center justify-center gap-2"
+                    onClick={handleSendOtp}
+                    disabled={loading || phone.length < 9}
+                    className="w-full bg-charcoal text-cream py-4 rounded-full font-medium hover:bg-charcoal/80 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    Send OTP <ArrowRight size={16} />
+                    {loading ? "Sending…" : <>Send OTP <ArrowRight size={16} /></>}
                   </button>
                 </div>
               ) : (
@@ -114,13 +187,14 @@ export default function LoginPage() {
                       />
                     ))}
                   </div>
-                  <button className="w-full bg-charcoal text-cream py-4 rounded-full font-medium hover:bg-charcoal/80 transition-colors">
-                    Verify & Sign In
-                  </button>
                   <button
-                    onClick={() => setStep("input")}
-                    className="w-full text-sm text-charcoal/50 hover:text-charcoal transition-colors"
+                    onClick={handleVerifyOtp}
+                    disabled={loading || otp.join("").length < 6}
+                    className="w-full bg-charcoal text-cream py-4 rounded-full font-medium hover:bg-charcoal/80 transition-colors disabled:opacity-50"
                   >
+                    {loading ? "Verifying…" : "Verify & Sign In"}
+                  </button>
+                  <button onClick={() => setStep("input")} className="w-full text-sm text-charcoal/50 hover:text-charcoal transition-colors">
                     ← Change number
                   </button>
                 </div>
@@ -144,9 +218,7 @@ export default function LoginPage() {
               <div>
                 <div className="flex justify-between items-center">
                   <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">Password</label>
-                  <Link href="#" className="text-xs text-sage hover:text-sage-dark transition-colors">
-                    Forgot password?
-                  </Link>
+                  <Link href="#" className="text-xs text-sage hover:text-sage-dark transition-colors">Forgot password?</Link>
                 </div>
                 <input
                   type="password"
@@ -156,8 +228,12 @@ export default function LoginPage() {
                   className="w-full mt-1 bg-mint/20 rounded-2xl px-4 py-3 text-sm text-charcoal placeholder:text-charcoal/30 focus:outline-none focus:ring-2 focus:ring-sage/40"
                 />
               </div>
-              <button className="w-full bg-charcoal text-cream py-4 rounded-full font-medium hover:bg-charcoal/80 transition-colors flex items-center justify-center gap-2">
-                Sign In <ArrowRight size={16} />
+              <button
+                onClick={handleEmailLogin}
+                disabled={loading || !email || !password}
+                className="w-full bg-charcoal text-cream py-4 rounded-full font-medium hover:bg-charcoal/80 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? "Signing in…" : <>Sign In <ArrowRight size={16} /></>}
               </button>
             </div>
           )}

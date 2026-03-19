@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { ShoppingCart, User, Globe } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ShoppingCart, User, Globe, LogOut } from "lucide-react";
 import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { logout } from "@/lib/firebase/auth";
+import { useCartStore } from "@/lib/stores/cartStore";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -13,7 +17,14 @@ const navLinks = [
 
 export default function Navbar() {
   const [lang, setLang] = useState<"TH" | "EN">("EN");
-  const [cartCount] = useState(0);
+  const { user, userDoc } = useAuth();
+  const itemCount = useCartStore((s) => s.itemCount());
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/");
+  };
 
   return (
     <header className="sticky top-0 z-50 backdrop-blur-lg bg-cream/80 border-b border-sage/20">
@@ -58,21 +69,42 @@ export default function Navbar() {
             aria-label="Cart"
           >
             <ShoppingCart size={20} />
-            {cartCount > 0 && (
+            {itemCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-sage text-white text-[10px] flex items-center justify-center font-medium">
-                {cartCount}
+                {itemCount}
               </span>
             )}
           </Link>
 
-          {/* Profile */}
-          <Link
-            href="/account"
-            className="text-charcoal/70 hover:text-charcoal transition-colors"
-            aria-label="Account"
-          >
-            <User size={20} />
-          </Link>
+          {/* Profile / Auth */}
+          {user ? (
+            <div className="flex items-center gap-3">
+              <Link
+                href="/account"
+                className="flex items-center gap-1.5 text-xs font-medium text-charcoal/70 hover:text-charcoal transition-colors"
+              >
+                <div className="w-6 h-6 rounded-full bg-mint flex items-center justify-center text-[10px] font-bold text-charcoal/70">
+                  {(userDoc?.displayName ?? user.email ?? "U")[0].toUpperCase()}
+                </div>
+                <span className="hidden md:inline">{userDoc?.displayName ?? "Account"}</span>
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="text-charcoal/40 hover:text-charcoal transition-colors"
+                aria-label="Sign out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="flex items-center gap-1 text-charcoal/70 hover:text-charcoal transition-colors"
+              aria-label="Sign in"
+            >
+              <User size={20} />
+            </Link>
+          )}
         </div>
       </div>
     </header>

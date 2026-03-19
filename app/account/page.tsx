@@ -1,29 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { ShoppingBag, Star, MapPin, Settings, LogOut, Copy, Check } from "lucide-react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
-
-const pointsHistory = [
-  { date: "12 Oct 2024", description: "Order #LF-9921 Organic Tofu Litter", points: +120 },
-  { date: "05 Oct 2024", description: "Friend Referral (Lisa W.)", points: +500 },
-  { date: "28 Sep 2024", description: "Redeemed Eco-Bowl 15cm", points: -800 },
-  { date: "15 Sep 2024", description: "Order #LF-9788 Bamboo Nest", points: +350 },
-  { date: "01 Sep 2024", description: "First Purchase Bonus", points: +10 },
-];
-
-const orders = [
-  { id: "LF-9921", date: "12 Oct 2024", items: "Organic Tofu Litter ×2", total: "฿1,250", status: "Delivered" },
-  { id: "LF-9788", date: "15 Sep 2024", items: "Bamboo Nest ×1", total: "฿890", status: "Delivered" },
-  { id: "LF-9612", date: "03 Aug 2024", items: "Zig Zag Scratcher ×1", total: "฿750", status: "Delivered" },
-];
+import { useAuth } from "@/contexts/AuthContext";
+import { logout } from "@/lib/firebase/auth";
+import { getUserPointsHistory, getUserOrders, updateUserProfile, PointsEntry, Order } from "@/lib/firebase/firestore";
 
 const statusColor: Record<string, string> = {
-  Delivered: "bg-mint text-sage-dark",
-  Shipped: "bg-gold/20 text-charcoal",
-  Packed: "bg-blush text-charcoal",
-  Confirmed: "bg-charcoal/10 text-charcoal",
+  delivered: "bg-mint text-sage-dark",
+  shipped: "bg-gold/20 text-charcoal",
+  packed: "bg-blush text-charcoal",
+  confirmed: "bg-charcoal/10 text-charcoal",
 };
 
 const navItems = [
@@ -34,109 +24,124 @@ const navItems = [
 ];
 
 export default function AccountPage() {
+  const { user, userDoc, loading, refreshUserDoc } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("points");
   const [copied, setCopied] = useState(false);
-  const referralCode = "LUKFUK-PET-2024";
+  const [pointsHistory, setPointsHistory] = useState<PointsEntry[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [displayName, setDisplayName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!loading && !user) router.push("/login");
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    if (!user) return;
+    getUserPointsHistory(user.uid).then(setPointsHistory);
+    getUserOrders(user.uid).then(setOrders);
+  }, [user]);
+
+  useEffect(() => {
+    if (userDoc) setDisplayName(userDoc.displayName);
+  }, [userDoc]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(referralCode);
+    if (!userDoc?.referralCode) return;
+    navigator.clipboard.writeText(userDoc.referralCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleSaveSettings = async () => {
+    if (!user) return;
+    setSaving(true);
+    await updateUserProfile(user.uid, { displayName });
+    await refreshUserDoc();
+    setSaving(false);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/");
+  };
+
+  if (loading || !user || !userDoc) {
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-sage border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  const initials = userDoc.displayName.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+
   return (
     <>
       <Navbar />
-
       <div className="max-w-6xl mx-auto px-6 py-12">
         <div className="flex flex-col md:flex-row gap-8">
 
-          {/* ── SIDEBAR ── */}
+          {/* Sidebar */}
           <aside className="w-full md:w-56 shrink-0">
             <div className="bg-cream border border-sage/20 rounded-3xl p-6 text-center mb-4">
               <div className="w-16 h-16 rounded-full bg-mint flex items-center justify-center text-sage font-bold text-xl mx-auto mb-3">
-                SK
+                {initials}
               </div>
-              <p className="font-semibold text-charcoal text-sm">Somchai K.</p>
-              <p className="text-xs text-charcoal/40 mt-0.5">Member since March 2023</p>
+              <p className="font-semibold text-charcoal text-sm">{userDoc.displayName}</p>
+              <p className="text-xs text-charcoal/40 mt-0.5">{userDoc.email || user.phoneNumber}</p>
             </div>
-
             <nav className="space-y-1">
               {navItems.map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setActiveTab(key)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${
-                    activeTab === key
-                      ? "bg-mint text-charcoal"
-                      : "text-charcoal/60 hover:bg-mint/30 hover:text-charcoal"
-                  }`}
-                >
-                  <Icon size={16} />
-                  {label}
+                <button key={key} onClick={() => setActiveTab(key)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all ${activeTab === key ? "bg-mint text-charcoal" : "text-charcoal/60 hover:bg-mint/30 hover:text-charcoal"}`}>
+                  <Icon size={16} />{label}
                 </button>
               ))}
-              <button className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-blush hover:bg-blush/10 transition-all">
-                <LogOut size={16} />
-                Log Out
+              <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-blush hover:bg-blush/10 transition-all">
+                <LogOut size={16} /> Log Out
               </button>
             </nav>
           </aside>
 
-          {/* ── CONTENT ── */}
+          {/* Content */}
           <div className="flex-1">
 
             {/* MY POINTS */}
             {activeTab === "points" && (
               <div className="space-y-6">
-                {/* Balance card */}
                 <div className="bg-charcoal rounded-3xl p-8">
                   <p className="text-cream/50 text-xs uppercase tracking-widest mb-2">Available Balance</p>
                   <p className="font-display text-6xl font-bold text-cream">
-                    2,450 <span className="text-2xl font-normal text-cream/40">pts</span>
+                    {userDoc.points.toLocaleString()} <span className="text-2xl font-normal text-cream/40">pts</span>
                   </p>
                   <p className="text-cream/40 text-xs mt-3 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-sage inline-block" />
-                    Resets 31 December
+                    <span className="w-1.5 h-1.5 rounded-full bg-sage inline-block" /> Resets 31 December
                   </p>
                 </div>
 
-                {/* Referral */}
                 <div className="bg-cream border border-sage/20 rounded-3xl p-6">
-                  <h2 className="font-display text-xl font-bold text-charcoal mb-1">
-                    Invite your paw-friends
-                  </h2>
-                  <p className="text-sm text-charcoal/50 mb-5">
-                    Share your unique code. When they make their first purchase, you both earn bonus points.
-                  </p>
+                  <h2 className="font-display text-xl font-bold text-charcoal mb-1">Invite your paw-friends</h2>
+                  <p className="text-sm text-charcoal/50 mb-5">Share your code. When they complete their first order, you earn 5 bonus points.</p>
                   <div className="flex gap-2 flex-wrap">
                     <div className="flex items-center gap-2 bg-mint/40 rounded-full px-4 py-2.5 flex-1 min-w-0">
-                      <span className="text-sm font-mono font-medium text-charcoal truncate">
-                        {referralCode}
-                      </span>
+                      <span className="text-sm font-mono font-medium text-charcoal truncate">{userDoc.referralCode}</span>
                       <button onClick={handleCopy} className="text-charcoal/40 hover:text-charcoal transition-colors shrink-0">
                         {copied ? <Check size={14} className="text-sage" /> : <Copy size={14} />}
                       </button>
                     </div>
-                    <button className="bg-[#06C755] text-white px-5 py-2.5 rounded-full text-sm font-medium hover:bg-[#06C755]/80 transition-colors">
-                      LINE
-                    </button>
-                    <button
-                      onClick={handleCopy}
-                      className="bg-charcoal text-cream px-5 py-2.5 rounded-full text-sm font-medium hover:bg-charcoal/80 transition-colors"
-                    >
+                    <button onClick={handleCopy} className="bg-charcoal text-cream px-5 py-2.5 rounded-full text-sm font-medium hover:bg-charcoal/80 transition-colors">
                       Copy Link
                     </button>
                   </div>
                 </div>
 
-                {/* Points history */}
                 <div className="bg-cream border border-sage/20 rounded-3xl p-6">
-                  <div className="flex items-center justify-between mb-5">
-                    <h2 className="font-semibold text-charcoal">Points History</h2>
-                    <button className="text-xs text-sage hover:text-sage-dark transition-colors">View All</button>
-                  </div>
-                  <div className="overflow-x-auto">
+                  <h2 className="font-semibold text-charcoal mb-5">Points History</h2>
+                  {pointsHistory.length === 0 ? (
+                    <p className="text-sm text-charcoal/40 text-center py-8">No points activity yet.</p>
+                  ) : (
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-sage/20">
@@ -148,16 +153,18 @@ export default function AccountPage() {
                       <tbody className="divide-y divide-sage/10">
                         {pointsHistory.map((row, i) => (
                           <tr key={i} className="hover:bg-mint/10 transition-colors">
-                            <td className="py-3 text-charcoal/50 text-xs whitespace-nowrap pr-4">{row.date}</td>
+                            <td className="py-3 text-charcoal/50 text-xs whitespace-nowrap pr-4">
+                              {row.createdAt ? new Date(row.createdAt.seconds * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—"}
+                            </td>
                             <td className="py-3 text-charcoal/70">{row.description}</td>
-                            <td className={`py-3 text-right font-semibold ${row.points > 0 ? "text-sage" : "text-blush"}`}>
-                              {row.points > 0 ? `+${row.points}` : row.points}
+                            <td className={`py-3 text-right font-semibold ${row.amount > 0 ? "text-sage" : "text-blush"}`}>
+                              {row.amount > 0 ? `+${row.amount}` : row.amount}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  )}
                 </div>
               </div>
             )}
@@ -166,25 +173,29 @@ export default function AccountPage() {
             {activeTab === "orders" && (
               <div className="bg-cream border border-sage/20 rounded-3xl p-6">
                 <h2 className="font-semibold text-charcoal mb-5">My Orders</h2>
-                <div className="space-y-3">
-                  {orders.map((o) => (
-                    <div key={o.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-sage/10 hover:bg-mint/10 transition-colors">
-                      <div>
-                        <p className="font-medium text-sm text-charcoal">#{o.id}</p>
-                        <p className="text-xs text-charcoal/40 mt-0.5">{o.date} · {o.items}</p>
+                {orders.length === 0 ? (
+                  <p className="text-sm text-charcoal/40 text-center py-8">No orders yet.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {orders.map((o) => (
+                      <div key={o.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-sage/10 hover:bg-mint/10 transition-colors">
+                        <div>
+                          <p className="font-medium text-sm text-charcoal">#{o.id?.slice(0, 8).toUpperCase()}</p>
+                          <p className="text-xs text-charcoal/40 mt-0.5">{o.items.map((i) => `${i.name} ×${i.qty}`).join(", ")}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <p className="font-semibold text-charcoal text-sm">฿{o.total.toLocaleString()}</p>
+                          <span className={`text-xs font-medium px-3 py-1 rounded-full ${statusColor[o.status]}`}>
+                            {o.status.charAt(0).toUpperCase() + o.status.slice(1)}
+                          </span>
+                          {o.trackingNumber && (
+                            <span className="text-xs text-charcoal/40 font-mono">{o.trackingNumber}</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <p className="font-semibold text-charcoal text-sm">{o.total}</p>
-                        <span className={`text-xs font-medium px-3 py-1 rounded-full ${statusColor[o.status]}`}>
-                          {o.status}
-                        </span>
-                        <button className="text-xs text-sage hover:text-sage-dark transition-colors font-medium">
-                          Track →
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -194,9 +205,7 @@ export default function AccountPage() {
                 <h2 className="font-semibold text-charcoal mb-5">My Addresses</h2>
                 <div className="border-2 border-dashed border-sage/30 rounded-2xl p-8 text-center">
                   <p className="text-charcoal/40 text-sm mb-3">No saved addresses yet</p>
-                  <button className="bg-charcoal text-cream px-5 py-2.5 rounded-full text-sm font-medium hover:bg-charcoal/80 transition-colors">
-                    + Add Address
-                  </button>
+                  <button className="bg-charcoal text-cream px-5 py-2.5 rounded-full text-sm font-medium hover:bg-charcoal/80 transition-colors">+ Add Address</button>
                 </div>
               </div>
             )}
@@ -205,24 +214,30 @@ export default function AccountPage() {
             {activeTab === "settings" && (
               <div className="bg-cream border border-sage/20 rounded-3xl p-6 space-y-4">
                 <h2 className="font-semibold text-charcoal mb-5">Settings</h2>
-                {["Display Name", "Email", "Phone Number"].map((field) => (
-                  <div key={field}>
-                    <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">{field}</label>
-                    <input
-                      className="w-full mt-1 bg-mint/20 rounded-2xl px-4 py-3 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-sage/30"
-                      placeholder={field}
-                    />
-                  </div>
-                ))}
-                <button className="bg-charcoal text-cream px-6 py-3 rounded-full text-sm font-medium hover:bg-charcoal/80 transition-colors mt-2">
-                  Save Changes
+                <div>
+                  <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">Display Name</label>
+                  <input value={displayName} onChange={(e) => setDisplayName(e.target.value)}
+                    className="w-full mt-1 bg-mint/20 rounded-2xl px-4 py-3 text-sm text-charcoal focus:outline-none focus:ring-2 focus:ring-sage/30" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">Email</label>
+                  <input value={userDoc.email} readOnly
+                    className="w-full mt-1 bg-mint/10 rounded-2xl px-4 py-3 text-sm text-charcoal/50 cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-charcoal/40 uppercase tracking-wider">Phone</label>
+                  <input value={userDoc.phone || user.phoneNumber || ""} readOnly
+                    className="w-full mt-1 bg-mint/10 rounded-2xl px-4 py-3 text-sm text-charcoal/50 cursor-not-allowed" />
+                </div>
+                <button onClick={handleSaveSettings} disabled={saving}
+                  className="bg-charcoal text-cream px-6 py-3 rounded-full text-sm font-medium hover:bg-charcoal/80 transition-colors disabled:opacity-50">
+                  {saving ? "Saving…" : "Save Changes"}
                 </button>
               </div>
             )}
           </div>
         </div>
       </div>
-
       <Footer />
     </>
   );
